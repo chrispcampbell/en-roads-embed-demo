@@ -1,0 +1,348 @@
+html {
+  box-sizing: border-box;
+}
+
+body {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 12px;
+  background-color: #fff;
+  color: #333;
+  font-family: sans-serif;
+  font-size: 18px;
+  line-height: 22px;
+}
+
+:root {
+  --en-roads-graph-font-scale: 1;
+  --en-roads-comment-right-offset: 22px;
+}
+
+/* Increase the embedded graph dimensions and font size when the viewport is larger */
+@media screen and (min-width: 920px) and (min-height: 600px) {
+  :root {
+    --en-roads-graph-font-scale: 1.3;
+    --en-roads-comment-right-offset: 32px;
+  }
+}
+
+/* XXX: Temporary */
+section {
+  margin-bottom: 150px;
+}
+
+a {
+  color: #2780e3;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+a:not([href]) {
+  cursor: pointer;
+}
+
+p {
+  margin: 0 0 1rem 0;
+}
+
+iframe {
+  display: block;
+  margin: 20px auto;
+  border: none;
+}
+
+details {
+  margin-bottom: 20px;
+}
+
+summary {
+  cursor: pointer;
+}
+
+pre {
+  font-size: 12px;
+  background-color: #f7f7f7;
+  border-radius: 8px;
+  padding: 8px;
+  overflow: auto;
+}
+
+code {
+  font-size: 0.9em;
+  background-color: #eee;
+}
+
+.segmented-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  /* max-width: 480px; */
+  margin: 0 auto 16px auto;
+  background-color: white;
+  border: #00b6f1 1px solid;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented-container input {
+  display: none;
+}
+
+.segmented-container label {
+  flex: 1;
+  padding: 10px 0;
+  text-align: center;
+  color: #00b6f1;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  transition-property: background-color, color;
+  transition-duration: 250ms;
+  transition-timing-function: cubic-bezier(0, 0.95, 0.38, 0.98);
+}
+
+.segmented-container label:not(:last-child) {
+  border-right: 1px solid #00b6f1;
+}
+
+.segmented-container input:checked + label {
+  background-color: #00b6f1;
+  color: white;
+}
+
+.segmented-button-value {
+  font-weight: 700;
+}
+
+.segmented-button-units {
+  font-weight: 400;
+  font-size: 0.7em;
+}
+
+/* Render subscripts and superscripts without affecting line height */
+/*
+ * XXX: The `position: relative` hack causes subscripts to bleed through the
+ * `position: sticky` component, so we can't use it.
+ */
+/*
+sup,
+sub {
+  vertical-align: 0;
+  position: relative;
+}
+sup {
+  bottom: 0.7ex;
+}
+sub {
+  top: 0.6ex;
+}
+*/
+sub {
+  line-height: 0;
+}
+
+.sticky-caption-marker {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 1px;
+}
+.sticky-caption-marker.in-top {
+  top: -30px;
+  /* background-color: red; */
+}
+.sticky-caption-marker.in-bot {
+  top: 120px;
+  /* background-color: orange; */
+}
+.sticky-caption-marker.out-top {
+  bottom: 120px;
+  /* background-color: green; */
+}
+.sticky-caption-marker.out-bot {
+  bottom: 40px;
+  /* background-color: blue; */
+}
+
+.en-roads-captions-container {
+  position: relative;
+  width: 100%;
+  /* This height determines how long the caption will stick */
+  /* height: 400px; */
+  /* min-height: 400px; */
+  /* top: 200px; */
+  top: 0;
+  left: 0;
+  z-index: 2000;
+  pointer-events: none;
+}
+.debug .en-roads-captions-container {
+  background-color: yellow;
+  opacity: 0.2;
+}
+
+.en-roads-caption-wrapper {
+  position: relative;
+  display: flex;
+  width: 100%;
+  justify-content: flex-end;
+}
+.debug .en-roads-caption-wrapper {
+  background-color: purple;
+}
+
+/* When small screen (constrained width, for 0px to 659px) */
+@media screen /* and (max-width: 659px) */ {
+  .en-roads-caption {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    z-index: 2000;
+    line-height: 1.2;
+    pointer-events: none;
+  }
+
+  .en-roads-caption-content {
+    max-width: 300px;
+    background-color: rgba(245, 245, 250, 0.95);
+    border: solid 0.5px #999;
+    box-shadow: 0 0 6px 0px rgba(0, 0, 0, 0.3);
+    padding: 8px 10px;
+    pointer-events: none;
+  }
+
+  /* XXX: These values are empirically determined from inspecting embed height including sliders */
+  .sticky-content-container[data-embed='fgas-intro'] {
+    --en-roads-sticky-content-height: 382px;
+  }
+  .sticky-content-container[data-embed='fgas-ghg'] {
+    --en-roads-sticky-content-height: 350px;
+  }
+}
+
+/* When two-column (constrained width, for 660px to 719px) */
+@media screen and (min-width: 660px) {
+  .en-roads-caption {
+    align-items: flex-end;
+  }
+
+  .en-roads-caption-content {
+    max-width: 200px;
+    background-color: unset;
+    border: unset;
+    box-shadow: unset;
+  }
+}
+
+/* When two-column (constrained width, for 720px and larger) */
+@media screen and (min-width: 720px) {
+  .en-roads-caption-content {
+    position: absolute;
+    left: 62%;
+  }
+}
+
+/* When two-column (large graph, 920x600px and larger) */
+@media screen and (min-width: 920px) and (min-height: 600px) {
+  .en-roads-caption-content {
+    position: unset;
+    left: unset;
+    align-items: flex-end;
+    margin-right: unset;
+    max-width: 256px;
+  }
+
+  /* XXX: These values are empirically determined from inspecting embed height including sliders */
+  .sticky-content-container[data-embed='fgas-intro'] {
+    --en-roads-sticky-content-height: 553px;
+  }
+  .sticky-content-container[data-embed='fgas-ghg'] {
+    --en-roads-sticky-content-height: 529px;
+  }
+}
+
+.en-roads-scroll-marker {
+  position: absolute;
+  right: 0;
+  width: 100px;
+  height: 2px;
+  /* background-color: magenta; */
+}
+
+.en-roads-caption-spacer {
+  width: 100%;
+  /*
+   * XXX: On phones, we use a height of `65svmax`, which means that the spacer height will
+   * be 65% of the portrait mode height, regardless of whether we're in portrait or landscape
+   * mode.  This is a good compromise that makes the timing/spacing of the animations and
+   * captions work well for both portrait and for landscape (there is maybe too much space
+   * on landscape, but it is better than using `65vh` only, which doesn't leave much of
+   * a gap in landscape mode).  Also, by using the same spacing for both portrait and
+   * landscape, the browser is able to hold the scroll position more accurately when the
+   * user rotates the device.  We use `65vmax` and `65vh` as fallbacks in case the user's
+   * browser does not support `svmax` units (which had widespread adoption in 2022).
+   */
+  height: 65vh;
+  height: 65vmax;
+  height: 65svmax;
+  pointer-events: none;
+  /* background-color: rgba(255, 0, 0, 0.2); */
+}
+
+/*
+ * XXX: On devices larger than phones, use a spacer height of `75vh`, i.e., show the next
+ * caption when the previous one is on its way out.
+ */
+@media screen and (min-device-width: 450px) {
+  .en-roads-caption-spacer {
+    height: 75vh;
+  }
+}
+
+/*
+ * NOTE: These margin-top values are relative to the bottom of the sticky container
+ * height including sliders (see hardcoded `--en-roads-sticky-content-height` variable
+ * values above).
+ */
+
+/* When one-column (small screen), the first captions go below the embed */
+.en-roads-caption#fgas-intro-first-caption {
+  margin-top: -70px;
+}
+.en-roads-caption#fgas-ghg-first-caption {
+  margin-top: -40px;
+}
+
+/* When two-column (and small graph), the first captions go to the right (centered vertically with embed) */
+@media screen and (min-width: 660px) {
+  .en-roads-caption#fgas-intro-first-caption {
+    margin-top: -270px;
+  }
+  .en-roads-caption#fgas-ghg-first-caption {
+    margin-top: -360px;
+  }
+}
+
+/* When two-column (and large graph), the first captions go to the right (centered vertically with embed) */
+@media screen and (min-width: 920px) and (min-height: 600px) {
+  .en-roads-caption#fgas-intro-first-caption {
+    margin-top: -220px;
+  }
+  .en-roads-caption#fgas-ghg-first-caption {
+    margin-top: -300px;
+  }
+}
+
+.en-roads-embed {
+  /* Make embed placeholders extra tall so that post-embed text isn't visible initially */
+  height: 3000px;
+  /* Make embed placeholders transparent so that extras/captions aren't visible initially */
+  opacity: 0;
+}
+
+.graph-spacer {
+  height: 30px;
+  /* background-color: red; */
+}

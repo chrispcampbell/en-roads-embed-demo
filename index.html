@@ -1,0 +1,1952 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Force light mode, even if e.g., Chrome's auto dark mode is enabled -->
+    <meta name="color-scheme" content="light only" />
+
+    <title>Embedded En-ROADS Demo</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Roboto:wght@400&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="./global.css" />
+
+    <script>
+      const urlParams = new URLSearchParams(window.location.search)
+      const baseUrl = urlParams.get('url')
+      if (!baseUrl) {
+        throw new Error('url parameter is required')
+      }
+
+      // XXX: This is a temporary measure that allows the embed library to be loaded
+      // asynchronously on page load using a given base URL
+      const deferredInitCalls = []
+      function initEmbedAsync(embedId, callback) {
+        deferredInitCalls.push(() => {
+          initEmbed(embedId, callback)
+        })
+      }
+      function addEmbedTriggerAsync(triggerId, callback) {
+        deferredInitCalls.push(() => {
+          addEmbedTrigger(triggerId, callback)
+        })
+      }
+
+      // XXX: Dynamically load the embed CSS using the base URL parameter
+      const embedCss = document.createElement('link')
+      embedCss.rel = 'stylesheet'
+      embedCss.href = `${baseUrl}.css`
+      document.head.appendChild(embedCss)
+
+      // XXX: Dynamically add a script tag that loads the En-ROADS embed script using
+      // the base URL parameter
+      const embedScript = document.createElement('script')
+      embedScript.type = 'module'
+      embedScript.crossOrigin = ''
+      embedScript.src = `${baseUrl}.js`
+      embedScript.onload = () => {
+        console.log('En-ROADS embed script loaded')
+        // XXX: When the embed script is loaded, invoke the deferred calls
+        deferredInitCalls.forEach(call => call())
+      }
+      document.head.appendChild(embedScript)
+
+      // XXX: Dynamically replace placeholder elements with proper iframe elements using
+      // the base URL parameter
+      window.onload = () => {
+        const iframe = document.createElement('iframe')
+        iframe.id = 'en-roads-iframe-1'
+        iframe.src = `${baseUrl}.html?g0=63&p39=100`
+        iframe.width = '100%'
+        iframe.height = '100%'
+        iframe.scrolling = 'no'
+        const placeholder = document.getElementById('en-roads-iframe-placeholder-1')
+        placeholder.replaceWith(iframe)
+      }
+
+      function initEnRoadsPage(config) {
+        const inputSpecs = config.inputSpecs
+        const graphSpecs = config.graphSpecs
+        const refScenarios = config.refScenarios
+
+        const customizeInputSpec = (inputId, updateSpec) => {
+          const inputSpec = inputSpecs.get(inputId)
+          if (!inputSpec) {
+            throw new Error(`No input spec found for ${inputId}`)
+          }
+          updateSpec(inputSpec)
+        }
+
+        // Usual slider goes right-to-left, but we want it to be left-to-right
+        customizeInputSpec('415', inputSpec => {
+          inputSpec.reversed = false
+          inputSpec.labelKey = 'F-gas policies'
+        })
+
+        // Usual min is -1, but we want min to be 0
+        customizeInputSpec('47', inputSpec => {
+          inputSpec.minValue = 0
+          inputSpec.labelKey = 'Energy efficiency of new buildings'
+        })
+
+        // Override minimum and default values to be 0 (instead of 25/50 or 5/10)
+        // so that we can change these values in the F-gas intro story
+        for (const inputId of ['432', '433', '434']) {
+          customizeInputSpec(inputId, inputSpec => {
+            inputSpec.minValue = 0
+            inputSpec.defaultValue = 0
+          })
+        }
+
+        const addCustomGraphSpec = (graphId, idSuffix, updateSpec) => {
+          const graphSpec = graphSpecs.get(graphId)
+          if (!graphSpec) {
+            throw new Error(`No graph spec found for ${graphId}`)
+          }
+          const customId = `${graphId}-${idSuffix}`
+          if (graphSpecs.has(customId)) {
+            throw new Error(`Custom spec already defined for ${customId}`)
+          }
+          const newGraphSpec = updateSpec(graphSpec)
+          graphSpecs.set(customId, {
+            ...newGraphSpec,
+            id: customId
+          })
+        }
+
+        // F-gas Emissions by Type-Area (with dashed baseline plot)
+        const baselineLabelKey = 'Baseline Total'
+        addCustomGraphSpec('282', 'fgas-intro', origSpec => {
+          const li = origSpec.legendItems
+          const d = origSpec.datasets
+          // Change baseline to dashed with legend label "Baseline Total"
+          const baselineDataset = {
+            ...d[0],
+            lineStyle: 'dashed',
+            color: 'rgba(0, 0, 0, 0.0)'
+          }
+          const baselineLegendItem = {
+            ...li[0],
+            labelKey: baselineLabelKey
+          }
+          return {
+            ...origSpec,
+            yMax: 5,
+            yFormat: '.0f',
+            datasets: [baselineDataset, d[1], d[2], d[3], d[4]],
+            legendItems: [li[1], li[2], li[3], li[4], baselineLegendItem]
+          }
+        })
+
+        // Greenhouse Gas Net Emissions by Gas (with custom y-axis limits, "Other CDR" removed)
+        addCustomGraphSpec('63', 'fgas-ghg', origSpec => {
+          const li = origSpec.legendItems
+          const d = origSpec.datasets
+          // Replace y=0 dataset with dashed baseline plot
+          const baselineDataset = {
+            varId: '_co2_equivalent_net_emissions',
+            varName: 'CO2 Equivalent Net Emissions',
+            externalSourceName: 'Ref',
+            color: '#000',
+            lineStyle: 'dashed',
+            labelKey: baselineLabelKey
+          }
+          const baselineLegendItem = {
+            color: '#000',
+            labelKey: baselineLabelKey
+          }
+          // Hide CDR wedge and put F-gases wedge last
+          const legendItems = [baselineLegendItem, li[0], li[2], li[4], li[5], li[3]]
+          const datasets = [baselineDataset, d[1], d[3], d[5], d[6], d[4]]
+          return {
+            ...origSpec,
+            yMin: 0,
+            yMax: 80,
+            legendItems,
+            datasets
+          }
+        })
+
+        // Greenhouse Gas Net Emissions (with dotted 1.5C goal line, y-min changed from -20 to 0, and
+        // legend items hidden)
+        addCustomGraphSpec('62', 'afforestation', origSpec => {
+          return {
+            ...origSpec,
+            yMin: 0,
+            yMax: 100,
+            yAxisLabelKey: 'Gigatons CO2e / year',
+            datasets: [
+              origSpec.datasets[1],
+              {
+                varId: '_co2_equivalent_net_emissions',
+                varName: 'CO2 Equivalent Net Emissions',
+                externalSourceName: 'AltModel',
+                labelKey: 'Goal',
+                color: '#888',
+                lineStyle: 'dotted'
+              },
+              origSpec.datasets[2]
+            ],
+            legendItems: []
+          }
+        })
+
+        // XXX: These custom ref scenarios are only needed for the afforestation demo.
+        // The outputs for these scenarios will be captured at init time.
+        refScenarios.push({
+          // This is the 1.5C scenario used for the goal line on the afforestation graph
+          sourceName: 'Custom1Goal',
+          inputs: new Map([
+            // TODO: Share this definition with scenarioActions in page-init.ts
+            // v Coal
+            ['1', 95],
+            // v Deforestation
+            ['57', -7.8],
+            // v Methane
+            ['59', -90],
+            // ^ Renewables
+            ['16', -0.03],
+            // ^ Carbon price
+            ['39', 185],
+            // ^ Energy efficiency
+            ['47', 3.6],
+            ['50', 3.6],
+            // ^ Electrification
+            ['53', 85],
+            ['55', 85],
+            // ^ Tech carbon removal
+            ['67', 45],
+            // ^ Afforestation
+            ['65', 100]
+          ]),
+          // TODO: We shouldn't have to refer to specific varIds; need to make this more
+          // future proof
+          outputs: ['_co2_equivalent_net_emissions', '_temperature_change_from_1850']
+        })
+        refScenarios.push({
+          sourceName: 'Custom1Action',
+          inputs: new Map([
+            // Nature-Based CDR > Use Detailed Settings ON
+            ['418', 1],
+            // Nature-Based CDR > Percent available land used for afforestation
+            ['65', 100]
+          ]),
+          outputs: ['_co2_equivalent_net_emissions', '_temperature_change_from_1850']
+        })
+        refScenarios.push({
+          sourceName: 'Custom2Goal',
+          inputs: new Map([
+            // Waste and Leakage
+            ['61', 100]
+            // // Waste and Leakage > Use Detailed Settings ON
+            // ['209', 1],
+            // // Waste and Leakage > F-gases
+            // ['415', 100]
+          ]),
+          outputs: [
+            '_total_co2eq_emissions_from_hfc',
+            '_co2eq_emissions_from_sf6',
+            '_co2eq_emissions_from_pfc',
+            '_co2_equivalent_net_emissions',
+            '_temperature_change_from_1850'
+          ]
+        })
+
+        // The iframe content will resize automatically when the page is resized, but
+        // there is no automatic way to have the iframe containers on this page adjust
+        // their height to fit the iframe content.  We therefore listen for resize
+        // events that are sent by the iframes and adjust the iframe element height
+        // to match the content height.
+        window.addEventListener(
+          'message',
+          event => {
+            // Ignore events other than the resize events
+            if (event.data?.kind !== 'en-roads-embed-resize') {
+              return
+            }
+
+            // Find the iframe that sent the message
+            const iframeElems = document.querySelectorAll('iframe')
+            let sender
+            for (const iframeElem of iframeElems) {
+              if (iframeElem.contentWindow === event.source) {
+                sender = iframeElem
+              }
+            }
+
+            // Update the iframe element height to match the content height
+            if (sender) {
+              const contentHeight = event.data.height
+              sender.style = `height: ${contentHeight}px`
+            }
+          },
+          false
+        )
+      }
+    </script>
+  </head>
+
+  <body dir="ltr" class="no-debug">
+    <h1>Embedded En-ROADS Demo</h1>
+
+    <p>
+      This page demonstrates different techniques and options for embedding En&#8209;ROADS in
+      another web page.
+    </p>
+
+    <p>On this page:</p>
+    <ul style="margin-top: -10px; margin-bottom: 60px">
+      <li>
+        <a href="#single-graph-1-attached-slider-iframe"
+          >Single Graph + 1 Attached Slider (in iframe)</a
+        >
+      </li>
+      <li>
+        <a href="#single-graph-1-attached-slider">Single Graph + 1 Attached Slider</a>
+      </li>
+      <li>
+        <a href="#single-graph-1-attached-slider-custom-options">
+          Single Graph + 1 Attached Slider + Custom Options
+        </a>
+      </li>
+      <li>
+        <a href="#single-graph-3-attached-sliders"> Single Graph + 3 Attached Sliders </a>
+      </li>
+      <li>
+        <a href="#sticky-graph-1-detached-slider"><i>Sticky</i> Graph + 1 Attached Slider</a>
+      </li>
+      <li>
+        <a href="#sticky-graph-1-detached-slider"><i>Sticky</i> Graph + 1 Detached Slider</a>
+      </li>
+      <li>
+        <a href="#single-graph-1-attached-slider-input-links">
+          Single Graph + 1 Attached Slider + Input Links
+        </a>
+      </li>
+      <li>
+        <a href="#single-graph-input-selector">Single Graph + Input Selector</a>
+      </li>
+      <li>
+        <a href="#scroll-triggered-story-f-gases">
+          Scroll-Triggered Story (F-Gases Scrollytelling Article)
+        </a>
+      </li>
+      <li>
+        <a href="#programmatically-triggered-story">Programmatically-Triggered Story </a>
+      </li>
+      <li>
+        <a href="#scroll-driven-story-afforestatation-v2">Scroll-Driven Story (Afforestation v2)</a>
+      </li>
+      <li>
+        <a href="#scroll-driven-story-afforestatation-v1">Scroll-Driven Story (Afforestation v1)</a>
+      </li>
+    </ul>
+
+    <section>
+      <h2 id="single-graph-1-attached-slider-iframe">
+        Single Graph + 1 Attached Slider (in iframe)
+      </h2>
+      <p>
+        The simplest way to embed an En-ROADS graph is by adding an HTML
+        <code>&lt;iframe&gt;</code> element that points to the latest version (or a particular
+        version) of the <code>embed.html</code> page.
+      </p>
+      <p>
+        You can configure which graph and slider(s) are shown by providing URL query parameters
+        similar to the ones accepted by the En-ROADS web app. In this example, we use
+        <code>?g0=63&p39=100</code> which means it will show graph ID 63 (Greenhouse Gas Net
+        Emissions by Gas) and slider ID 39 (Carbon Price).
+      </p>
+      <details>
+        <summary>Show me the code!</summary>
+        <pre>
+&lt;iframe
+  src="https://en-roads.climateinteractive.org/<span style="color: green">embed.html?g0=63&p39=100"</span>
+  width="100%"
+  height="100%"
+  scrolling="no"
+&gt;
+&lt;/iframe&gt;</pre>
+      </details>
+      <!-- XXX: For now, we replace this placeholder element with an iframe when the page is loaded using the `url` parameter -->
+      <!--
+      <iframe
+        id="en-roads-iframe-1"
+        src="https://en-roads.climateinteractive.org/embed.html?g0=63&p39=100"
+        width="100%"
+        height="100%"
+        scrolling="no"
+      ></iframe>
+      -->
+      <div id="en-roads-iframe-placeholder-1"></div>
+    </section>
+
+    <!--
+    <section>
+      <h2>Single Graph + 3 Attached Sliders (in iframe)</h2>
+      <iframe
+        id="en-roads-iframe-2"
+        src="embed.html?g0=113&p1=40&p16=-0.05&p39=30"
+        width="100%"
+        height="100%"
+        scrolling="no"
+      ></iframe>
+    </section>
+    -->
+
+    <section>
+      <h2 id="single-graph-1-attached-slider">Single Graph + 1 Attached Slider</h2>
+      <p>
+        This is the simplest example of using the en-roads-embed library to embed a single graph
+        with an attached slider.
+      </p>
+      <ul>
+        <li>
+          To specify the graph, use the <code>data-graphs</code> attribute with the graph ID as the
+          value.
+        </li>
+        <li>
+          To specify the slider, use the <code>data-inputs</code> attribute with the slider ID as
+          the value.
+        </li>
+      </ul>
+      <details>
+        <summary>Show me the code!</summary>
+        <pre>
+<span style="color: #999">&lt;!--
+  NOTE: You only need to add the following to the &lt;head&gt; element of your page once.
+  If you are adding an embed to a page on the CI website, this is already handled for you.
+--&gt;</span>
+&lt;link rel="preconnect" href="https://fonts.googleapis.com" /&gt;
+&lt;link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /&gt;
+&lt;link
+  href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Roboto:wght@400&display=swap"
+  rel="stylesheet"
+/&gt;
+&lt;script type="module" crossorigin="" src="https://lib.climateinteractive.org/en-roads/embed/en-roads-embed-{DATE}/embed.js"&gt;&lt;/script&gt;
+&lt;link rel="stylesheet" href="https://lib.climateinteractive.org/en-roads/embed/en-roads-embed-{DATE}/embed.css"/&gt;
+
+<span style="color: #999">&lt;!--
+  Add the following somewhere in the &lt;body&gt; element of your page.
+--&gt;</span>
+&lt;div
+  class="en-roads-embed"
+  <span style="color: green">data-graphs="104"</span>
+  <span style="color: green">data-inputs="39"</span>
+&gt;&lt;/div&gt;</pre>
+      </details>
+      <div class="en-roads-embed" data-graphs="104" data-inputs="39"></div>
+      <div class="graph-spacer"></div>
+    </section>
+
+    <section>
+      <h2 id="single-graph-1-attached-slider-custom-options">
+        Single Graph + 1 Attached Slider + Custom Options
+      </h2>
+      <p>
+        This is the same as the previous example, except this one demonstrates how to hide or change
+        the default elements.
+      </p>
+      <ul>
+        <li>
+          To hide the graph description toggle (the "i" button), set the
+          <code>data-show-desc-toggle</code>
+          attribute to "false".
+        </li>
+        <li>
+          To hide the En-ROADS logo, set the
+          <code>data-show-logo</code> attribute to "false".
+        </li>
+        <li>
+          To show the temperature box on the side (instead of the default "mini" box), set the
+          <code>data-show-temp</code> attribute to "side" (or set it to "none" to hide it).
+        </li>
+      </ul>
+      <details>
+        <summary>Show me the code!</summary>
+        <pre>
+&lt;div
+  class="en-roads-embed"
+  data-graphs="104"
+  data-inputs="39"
+  <span style="color: green">data-show-desc-toggle="false"</span>
+  <span style="color: green">data-show-logo="false"</span>
+  <span style="color: green">data-show-temp="side"</span>
+&gt;&lt;/div&gt;</pre>
+      </details>
+      <div
+        class="en-roads-embed"
+        data-graphs="104"
+        data-inputs="39"
+        data-show-desc-toggle="false"
+        data-show-logo="false"
+        data-show-temp="side"
+      ></div>
+      <div class="graph-spacer"></div>
+    </section>
+
+    <section>
+      <h2 id="single-graph-3-attached-sliders">Single Graph + 3 Attached Sliders</h2>
+      <p>
+        It is possible to show more than one attached slider. Currently the embed library allows you
+        to show up to 3 sliders below the graph.
+      </p>
+      <ul>
+        <li>
+          To specify 2 or 3 slider rows, use the
+          <code>data-inputs</code> attribute and list the slider IDs separated by commas.
+        </li>
+      </ul>
+      <details>
+        <summary>Show me the code!</summary>
+        <pre>
+&lt;div
+  class="en-roads-embed"
+  data-graphs="104"
+  <span style="color: green">data-inputs="1,16,39"</span>
+&gt;&lt;/div&gt;</pre>
+      </details>
+      <div class="en-roads-embed" data-graphs="104" data-inputs="1,16,39"></div>
+      <div class="graph-spacer"></div>
+    </section>
+
+    <section>
+      <h2 id="sticky-graph-1-attached-slider">Sticky Graph + 1 Attached Slider</h2>
+      <p>
+        For some use cases, like when you have a lot of text below the graph that refers back to the
+        graph, it's helpful to have the graph remain stuck to the top of the window (this is called
+        "sticky" mode). This is especially helpful on small screens (i.e., on phones). This way,
+        when the user scrolls, the text will scroll behind the graph, but the user can still see the
+        graph without having to jump back and forth between graph and text.
+      </p>
+      <ul>
+        <li>To enable sticky mode, set the <code>data-layout-mode</code> attribute to "sticky".</li>
+      </ul>
+      <details>
+        <summary>Show me the code!</summary>
+        <pre>
+&lt;div
+  class="en-roads-embed"
+  data-graphs="104"
+  data-inputs="39"
+  <span style="color: green">data-layout-mode="sticky"</span>
+&gt;&lt;/div&gt;</pre>
+      </details>
+      <div
+        class="en-roads-embed"
+        data-graphs="104"
+        data-inputs="39"
+        data-layout-mode="sticky"
+      ></div>
+      <div class="graph-spacer"></div>
+      <p>
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec pharetra libero et magna
+        iaculis elementum. Praesent a sapien ac lacus aliquet convallis nec id risus. Mauris id urna
+        ac felis imperdiet rutrum. Nunc sed nibh non lacus sodales pretium sed ut turpis. Maecenas
+        pharetra pretium lectus. Sed congue erat a massa consectetur, sit amet fermentum quam
+        aliquam. Curabitur aliquet leo aliquet, vehicula mi non, varius dolor. Aenean convallis
+        lorem id tellus sollicitudin, ut elementum turpis blandit. Nunc interdum ante diam, eget
+        ultricies ante rhoncus sed. Fusce finibus ligula eget lorem ornare, non hendrerit diam
+        auctor.
+      </p>
+      <p>
+        Suspendisse felis mi, dictum non justo eget, porttitor interdum ipsum. Orci varius natoque
+        penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec et finibus mauris.
+        Donec quis auctor nulla. Integer non nulla in lorem molestie posuere. Pellentesque
+        sollicitudin, diam sed finibus aliquet, tellus enim lacinia metus, vitae gravida magna nulla
+        et nisi. Sed ac ipsum massa. Nullam id fringilla mauris, nec mattis tortor. Mauris eleifend
+        metus eu magna semper tincidunt. Nulla facilisi. Pellentesque dapibus augue at ultrices
+        facilisis.
+      </p>
+      <div class="graph-spacer"></div>
+    </section>
+
+    <section>
+      <h2 id="sticky-graph-1-detached-slider">Sticky Graph + 1 Detached Slider</h2>
+      <p>
+        Building on the previous example, it is also possible to have one or more sliders that are
+        spatially detached from the graph, but still connected such that changes to the slider(s)
+        affect the graph.
+      </p>
+      <ul>
+        <li>
+          To create a detached slider, instead of using the
+          <code>data-inputs</code> attribute on the <code>en-roads-embed</code> element like in
+          previous examples, add a separate <code>en-roads-slider</code> element somewhere after the
+          embed element.
+        </li>
+        <li>
+          Be sure to set the <code>data-group</code> attribute to the same value in both the embed
+          element and in the slider element(s). This tells the embed library that the graph and
+          slider(s) share the same underlying connection to the model.
+        </li>
+        <li>
+          It is recommended to enable "sticky" mode for the graph so that the slider(s) and graph
+          will always remain visible and usable.
+        </li>
+      </ul>
+      <details>
+        <summary>Show me the code!</summary>
+        <pre>
+&lt;div
+  class="en-roads-embed"
+  <span style="color: green">data-group="detached-slider-example-1"</span>
+  data-graphs="104"
+  data-layout-mode="sticky"
+&gt;&lt;/div&gt;
+
+<span style="color: green">&lt;div
+  class="en-roads-slider"
+  data-group="detached-slider-example-1"
+  data-input="39"&gt;
+&gt;&lt;/div&gt;</span></pre>
+      </details>
+      <div
+        class="en-roads-embed"
+        data-group="detached-slider-example-1"
+        data-graphs="104"
+        data-layout-mode="sticky"
+      ></div>
+      <div class="graph-spacer"></div>
+      <p>
+        Suspendisse felis mi, dictum non justo eget, porttitor interdum ipsum. Orci varius natoque
+        penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec et finibus mauris.
+        Donec quis auctor nulla. Integer non nulla in lorem molestie posuere. Pellentesque
+        sollicitudin, diam sed finibus aliquet, tellus enim lacinia metus, vitae gravida magna nulla
+        et nisi. Sed ac ipsum massa. Nullam id fringilla mauris, nec mattis tortor. Mauris eleifend
+        metus eu magna semper tincidunt. Nulla facilisi. Pellentesque dapibus augue at ultrices
+        facilisis.
+      </p>
+      <div class="en-roads-slider" data-group="detached-slider-example-1" data-input="39"></div>
+      <div class="graph-spacer"></div>
+    </section>
+
+    <section>
+      <h2 id="single-graph-attached-slider-input-links">
+        Single Graph + Attached Slider + Input Links
+      </h2>
+      <p>It is possible to have links or buttons in your text that control your embedded graph.</p>
+      <p>
+        In this example, we include 3 links, one that sets the slider to a low carbon price, one
+        that sets it to a high carbon price, and one that resets to the default.
+      </p>
+      <ul>
+        <li>
+          To create an input link or button in your text, add an HTML element (e.g.,
+          <code>&lt;a&gt;</code> or <code>&lt;button&gt;</code>) and set the
+          <code>class</code> attribute to "en-roads-input".
+        </li>
+        <li>
+          Set the <code>data-input-id</code> attribute to the ID of the input/slider that you want
+          to control.
+        </li>
+        <li>
+          Set the <code>data-input-value</code> attribute to the value of the input/slider that will
+          be set when the link or button is clicked.
+        </li>
+        <li>
+          Be sure to set the <code>data-group</code> attribute to the same value in both the embed
+          element and in the input element(s). This tells the embed library that the graph and
+          inputs share the same underlying connection to the model.
+        </li>
+      </ul>
+      <details>
+        <summary>Show me the code!</summary>
+        <pre>
+&lt;div
+  class="en-roads-embed"
+  <span style="color: green">data-group="input-links-example-1"</span>
+  data-graphs="2"
+  data-inputs="39"
+&gt;&lt;/div&gt;
+
+<span style="color: green">&lt;a
+  class="en-roads-input"
+  data-group="input-links-example-1"
+  data-input-id="39"
+  data-input-value="15"
+  role="button"
+&gt;
+  low carbon price
+&lt;/a&gt;</span></pre>
+      </details>
+      <div
+        class="en-roads-embed"
+        data-group="input-links-example-1"
+        data-graphs="2"
+        data-inputs="39"
+      ></div>
+      <div class="graph-spacer"></div>
+      <p>
+        See what impact a
+        <a
+          class="en-roads-input"
+          data-group="input-links-example-1"
+          data-input-id="39"
+          data-input-value="15"
+          role="button"
+          >low carbon price</a
+        >
+        or a
+        <a
+          class="en-roads-input"
+          data-group="input-links-example-1"
+          data-input-id="39"
+          data-input-value="75"
+          role="button"
+          >high carbon price</a
+        >
+        can have on energy demand.
+        <a
+          class="en-roads-input"
+          data-group="input-links-example-1"
+          data-input-id="39"
+          data-input-value="5"
+          role="button"
+          >Click here to reset.</a
+        >
+      </p>
+    </section>
+
+    <section>
+      <h2 id="single-graph-input-selector">Single Graph + Input Selector</h2>
+      <p>
+        Building on the previous example, you are not limited to using simple links to control
+        inputs.
+      </p>
+      <p>
+        In this example, we use a custom selector component (built from styled radio buttons) to
+        control the model inputs.
+      </p>
+      <p>
+        Note that we don't have an attached slider in this case; the user can simply use the buttons
+        to try different carbon price options.
+      </p>
+      <details>
+        <summary>Show me the code!</summary>
+        <pre>
+&lt;div
+  class="en-roads-embed"
+  <span style="color: green">data-group="input-selector-example-1"</span>
+  data-graphs="2"
+  data-inputs="39"
+&gt;&lt;/div&gt;
+
+<span style="color: #999">&lt;!-- See page source for more details --&gt;</span>
+<span style="color: green">&lt;input
+  class="en-roads-input"
+  type="radio"
+  name="price1"
+  id="price1-1"
+  checked
+  class="en-roads-input"
+  data-group="input-selector-example-1"
+  data-input-id="39"
+  data-input-value="0"
+/&gt;</span></pre>
+      </details>
+      <div class="en-roads-embed" data-group="input-selector-example-1" data-graphs="2"></div>
+      <div class="graph-spacer"></div>
+      <p>See what impact different carbon prices can have on energy demand:</p>
+      <div class="segmented-container">
+        <input
+          type="radio"
+          name="price1"
+          id="price1-1"
+          checked
+          class="en-roads-input"
+          data-group="input-selector-example-1"
+          data-input-id="39"
+          data-input-value="0"
+        />
+        <label for="price1-1"><span class="segmented-button-value">None</span></label>
+        <input
+          type="radio"
+          name="price1"
+          id="price1-2"
+          class="en-roads-input"
+          data-group="input-selector-example-1"
+          data-input-id="39"
+          data-input-value="10"
+        />
+        <label for="price1-2">
+          <span class="segmented-button-value">$10</span>
+          <span class="segmented-button-units"> / ton CO<sub>2</sub></span>
+        </label>
+        <input
+          type="radio"
+          name="price1"
+          id="price1-3"
+          class="en-roads-input"
+          data-group="input-selector-example-1"
+          data-input-id="39"
+          data-input-value="50"
+        />
+        <label for="price1-3"
+          ><span class="segmented-button-value">$50</span
+          ><span class="segmented-button-units"> / ton CO<sub>2</sub></span></label
+        >
+        <input
+          type="radio"
+          name="price1"
+          id="price1-4"
+          class="en-roads-input"
+          data-group="input-selector-example-1"
+          data-input-id="39"
+          data-input-value="100"
+        />
+        <label for="price1-4"
+          ><span class="segmented-button-value">$100</span
+          ><span class="segmented-button-units"> / ton CO<sub>2</sub></span></label
+        >
+      </div>
+    </section>
+
+    <section>
+      <h2 id="scroll-triggered-story-f-gases">
+        Scroll-Triggered Story (F-Gases Scrollytelling Article)
+      </h2>
+      <p>This is a complete example of "scrollytelling" using the en-roads-embed library.</p>
+      <p>
+        <i>
+          Note that this example is very close to the
+          <a href="https://www.climateinteractive.org/blog/f-gas-insights/">
+            F-Gases Matter To Climate Success
+          </a>
+          article that we published in July 2024. We keep a version of it in the en-roads-app repo
+          for demonstration purposes and to allow for easier testing. The animations are the same
+          but there may be some differences in the text context, the styling of captions, etc.
+        </i>
+      </p>
+      <details>
+        <summary>Show me the code!</summary>
+        <ul style="margin-top: 4px">
+          <li>There is too much code involved to show it all here.</li>
+          <li>
+            The following code snippet shows only the high-level structure of an
+            <code>en-roads-embed</code> block, with the most important parts highlighted in green.
+          </li>
+          <li>
+            To see more details, you can open
+            <code>embed-demo-options.html</code> in VS Code, or use the "View Source" feature in
+            your browser (Command+U in Firefox, or Option+Command+U in Safari or Chrome).
+          </li>
+        </ul>
+        <pre>
+<span style="color: #999">&lt;!-- See page source for more details --&gt;</span>
+&lt;div
+  class="en-roads-embed"
+  <span style="color: green">data-embed-id=<span style="background-color: palegreen">"fgas-intro"</span></span>
+  data-title="F-gas Emissions"
+  data-graphs="282-fgas-intro"
+  data-inputs="415,47"
+  <span style="color: green">data-layout-mode="sticky-scroll-triggered"</span>
+  data-sticky-height="6000"
+  data-show-desc-toggle="false"
+  data-show-logo="false"
+&gt;
+  &lt;script type="module"&gt;
+    <span style="color: #999">// Define an `initEmbed` function that sets up your story.  Note that the first argument
+    // has to match the `data-embed-id` attribute above it (in this case, "fgas-intro").</span>
+    <span style="color: green">initEmbed(<span style="background-color: palegreen">'fgas-intro'</span>, context =&gt; {
+      // ...
+    })</span>
+  &lt;/script&gt;
+
+  <span style="color: #999">&lt;!-- Add an element with the `en-roads-caption` class --&gt;</span>
+  &lt;div class="en-roads-caption"&gt;
+    <span style="color: #999">&lt;!-- Define a child element with the `en-roads-scroll-marker` class and `data-trigger` attribute --&gt;</span>
+    &lt;div class="en-roads-scroll-marker" <span style="color: green">data-trigger=<span style="background-color: yellow">"reveal-history"</span></span>&gt;
+      &lt;script type="module"&gt;
+        <span style="color: #999">// Call the `addEmbedTrigger` function in a script under the scroll marker.  This tells the
+        // embed library what actions to take (e.g., "show comment", "animate datasets") when the
+        // marker is triggered by the user scrolling the page.  Note that the first argument has to
+        // match the `data-trigger` attribute value above it (in this case, "reveal-history").</span>
+        <span style="color: green">addEmbedTrigger(<span style="background-color: yellow">'reveal-history'</span>, (context, active) =&gt; {
+          // ...
+        })</span>
+      &lt;/script&gt;
+    &lt;/div&gt;
+
+    <span style="color: #999">&lt;!-- Define a child element with the `en-roads-caption-content` class --&gt;</span>
+    &lt;div class="en-roads-caption-content"&gt;
+      <span style="color: green">Emissions of ozone-depleting "Montreal gases" have been falling since the Montreal
+      Protocol was finalized in 1987.</span>
+    &lt;/div&gt;
+  &lt;/div&gt;
+
+  <span style="color: #999">&lt;!-- Add an element with the `en-roads-caption-spacer` class after each caption --&gt;</span>
+  &lt;div class="en-roads-caption-spacer"&gt;&lt;/div&gt;
+
+  <span style="color: #999">&lt;!-- Repeat the above for each caption in your story --&gt;</span>
+&lt;/div&gt;</pre>
+      </details>
+      <h3 style="margin-top: 40px">Part 1: Introduction</h3>
+      <p>
+        F-gases matter! Some of the most potent greenhouse gases may be lurking in your home.
+        Fluorinated gases (F-gases), found in refrigerators, air conditioners, and aerosols, are far
+        more harmful to the climate than you might think.
+      </p>
+      <p>
+        Alongside tackling carbon dioxide, methane, and nitrous oxide, addressing these pollutants
+        can make the difference between staying below and overshooting the critical 2°C Paris
+        Agreement global temperature limit. Action on F-gases requires policies that promote less
+        harmful alternatives, control leaks, reuse products, and ensure the destruction of gases at
+        the end of their lifecycle.
+      </p>
+      <p>
+        <i>
+          Scroll to see the pathways and strategies that can curb F-gas emissions in the En-ROADS
+          simulator from Climate Interactive and MIT Sloan.
+        </i>
+      </p>
+      <div
+        class="en-roads-embed"
+        data-embed-id="fgas-intro"
+        data-title="F-gas Emissions"
+        data-graphs="282-fgas-intro"
+        data-inputs="415,47"
+        data-layout-mode="sticky-scroll-triggered"
+        data-sticky-height="6000"
+        data-show-desc-toggle="false"
+        data-show-logo="false"
+      >
+        <script type="module">
+          initEmbedAsync('fgas-intro', context => {
+            // Configure the model inputs that stay constant during the story
+            // XXX: We set the F-gas detail slider to 100% initially, but set the 3 assumption sliders to 0%.
+            // This is equivalent to the usual baseline scenario with F-gas at 0% and the assumption sliders
+            // at their default values.
+            // Enable the "Waste and Leakage" detailed settings switch
+            context.setInputValue('209', 1)
+            // Set the F-gases detail slider to 100%
+            context.setInputValue('415', 100)
+            // Set the other three assumption sliders to 0%
+            context.setInputValue('432', 0)
+            context.setInputValue('433', 0)
+            context.setInputValue('434', 0)
+
+            // Configure the model inputs for the "F-gas" best practices scenarios that will be animated
+            context.addInputGroup('stop-leaks', [['432', 50]])
+            context.addInputGroup('use-alternatives', [['433', 50]])
+            context.addInputGroup('capture-destroy', [['434', 10]])
+            context.addInputGroup('boost-efficiency', [['47', 5]])
+
+            // Configure the comments
+            const blue = '#00b6f1'
+            context.addComment({
+              id: 'history',
+              yPos: 3.65,
+              lines: ['History']
+            })
+            context.addComment({
+              id: 'where-headed',
+              align: 'right',
+              yPos: 4.7,
+              lines: ['Where we are headed']
+            })
+            context.addComment({
+              id: 'stop-leaks',
+              align: 'right',
+              color: blue,
+              shadow: true,
+              yPos: 3.6,
+              lines: ['Stop leaks and reuse']
+            })
+            context.addComment({
+              id: 'use-alternatives',
+              align: 'right',
+              color: blue,
+              shadow: true,
+              yPos: 2.8,
+              lines: ['Use alternatives']
+            })
+            context.addComment({
+              id: 'capture-destroy',
+              align: 'right',
+              color: blue,
+              shadow: true,
+              yPos: 2.01,
+              lines: ['Capture and destroy']
+            })
+            context.addComment({
+              id: 'boost-efficiency',
+              align: 'right',
+              color: blue,
+              shadow: true,
+              yPos: 1.2,
+              lines: ['Boost energy efficiency']
+            })
+
+            // Configure the legend items
+            let delay = 0
+            for (let i = 0; i < context.legend.items.length; i++) {
+              // Keep all hidden initially except for the "Montreal Gases" item
+              const item = context.legend.items[i]
+              item.visible.set(i === 3)
+
+              // Add a little delay for the 3 "other F-gas" items so that they fade
+              // in from left-to-right
+              if (i < 3) {
+                item.fadeInDelay = delay
+                delay += 0.05
+              }
+            }
+
+            // Configure the dataset animations
+            const currentYear = new Date().getFullYear()
+            context.addDatasetAnim('reveal-to-current-year')
+            context.addDatasetAnim('reveal-other-f-gases')
+            context.addDatasetAnim('reveal-to-final-year')
+            context.onDatasetAnimUpdate((state, anims) => {
+              const revealToCurrentYearProgress = anims.get('reveal-to-current-year')
+              const revealOtherFGasesProgress = anims.get('reveal-other-f-gases')
+              const revealToFinalYearProgress = anims.get('reveal-to-final-year')
+
+              const vm = state.viewModel
+              const spec = vm.spec
+
+              if (
+                spec.varId === '_co2eq_emissions_from_f_gas_and_ods' &&
+                spec.externalSourceName === 'Ref'
+              ) {
+                // We keep the "Baseline Total" plot visible but change its opacity depending
+                // on the animation progress
+                state.visible = true
+                if (revealToFinalYearProgress > 0) {
+                  // Fade the baseline plot in during the "reveal to final year" animation
+                  vm.color = `rgba(0, 0, 0, ${revealToFinalYearProgress})`
+                } else {
+                  // Otherwise, keep the baseline plot transparent
+                  // XXX: We need to use a nearly transparent color instead of fully transparent,
+                  // otherwise the fade animation doesn't work correctly
+                  vm.color = 'rgba(0, 0, 0, 0.01)'
+                }
+              } else if (spec.varId === '_total_co2eg_from_ods_emissions') {
+                // The "Montreal Gases" plot is always visible
+                state.visible = true
+              } else {
+                // The other F-gas plots are visible only after the "reveal other" animation
+                // is triggered
+                state.visible = revealOtherFGasesProgress > 0
+              }
+
+              if (revealToFinalYearProgress === 0) {
+                // If we haven't reached the "reveal to final year" animation, control the
+                // reveal from 2000 to current year
+                state.progress = revealToCurrentYearProgress
+                state.animMinYear = 2000
+                state.animMaxYear = currentYear
+              } else {
+                // Once the "reveal to current year" animation is complete, control the
+                // reveal from current year to 2100
+                state.progress = revealToFinalYearProgress
+                state.animMinYear = currentYear
+                state.animMaxYear = 2100
+              }
+            })
+          })
+        </script>
+
+        <div class="en-roads-caption" id="fgas-intro-first-caption">
+          <div class="en-roads-scroll-marker" data-trigger="reveal-history">
+            <script type="module">
+              addEmbedTriggerAsync('reveal-history', (context, active) => {
+                // Show the "History" comment
+                context.setCommentVisible('history', active)
+
+                // Animate the datasets to reveal from 2000 to current year
+                context.setDatasetAnimActive('reveal-to-current-year', 0, 800, active)
+
+                // Hide all legend items except for "Montreal Gases"
+                for (const legendItem of context.legend.items) {
+                  if (!legendItem.spec.labelKey.includes('montreal')) {
+                    legendItem.visible.set(false)
+                  }
+                }
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            Emissions of ozone-depleting "Montreal gases" have been falling since the Montreal
+            Protocol was finalized in 1987.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="reveal-other-f-gases">
+            <script type="module">
+              addEmbedTriggerAsync('reveal-other-f-gases', (context, active) => {
+                // Reveal the other F-gas plots
+                context.setDatasetAnimActive('reveal-other-f-gases', 0, 10, active)
+
+                // Show the other legend items for F-gases
+                for (const legendItem of context.legend.items) {
+                  if (!legendItem.spec.labelKey.includes('montreal')) {
+                    if (legendItem.spec.labelKey.includes('Baseline')) {
+                      legendItem.visible.set(false)
+                    } else {
+                      legendItem.visible.set(active)
+                    }
+                  }
+                }
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            However, emissions of the other <b>F&#8209;gases</b> have been on the rise, primarily as
+            they replaced the ozone-depleting Montreal gases.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="reveal-to-2100">
+            <script type="module">
+              addEmbedTriggerAsync('reveal-to-2100', (context, active) => {
+                // Dim the "History" comment
+                context.setCommentDim('history', active)
+
+                // Show the "Where we are headed" comment
+                context.setCommentVisible('where-headed', active)
+
+                // Animate the datasets to reveal from current year to 2100
+                context.setDatasetAnimActive('reveal-to-final-year', 0, 1400, active)
+
+                // Show the baseline legend item
+                for (const legendItem of context.legend.items) {
+                  if (legendItem.spec.labelKey.includes('Baseline')) {
+                    legendItem.visible.set(active)
+                  }
+                }
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            On our current course, F&#8209;gas emissions in 2100 could be 50% more than today's
+            levels.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="hide-comments">
+            <script type="module">
+              addEmbedTriggerAsync('hide-comments', (context, active) => {
+                // Hide the "History" and "Where we are headed" comments
+                context.setCommentVisible('history', !active)
+                context.setCommentVisible('where-headed', !active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            Scroll to see what happens when we avoid future F-gas emissions by
+            <b>enacting policies</b>.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="stop-leaks">
+            <script type="module">
+              addEmbedTriggerAsync('stop-leaks', (context, active) => {
+                // Show the "Stop leaks and reuse" comment and set the associated inputs
+                context.setCommentVisible('stop-leaks', active)
+                context.setInputGroupActive('stop-leaks', active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            Implement best practices for
+            <b>reducing leaks, recovering, and reusing</b> the F-gases in old equipment.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="use-alternatives">
+            <script type="module">
+              addEmbedTriggerAsync('use-alternatives', (context, active) => {
+                // Dim the previous comment
+                context.setCommentDim('stop-leaks', active)
+
+                // Show the "Use alternatives" comment and set the associated inputs
+                context.setCommentVisible('use-alternatives', active)
+                context.setInputGroupActive('use-alternatives', active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            Shift to the <b>use of alternatives</b> with a lower global warming potential, such as
+            ammonia or CO<sub>2</sub> as refrigerants.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="capture-destroy">
+            <script type="module">
+              addEmbedTriggerAsync('capture-destroy', (context, active) => {
+                // Dim the previous comment
+                context.setCommentDim('use-alternatives', active)
+
+                // Show the "Capture and destroy" comment and set the associated inputs
+                context.setCommentVisible('capture-destroy', active)
+                context.setInputGroupActive('capture-destroy', active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            <b>Capture and destroy</b> F&#8209;gases in obsolete equipment (refrigerators, A/Cs) and
+            in stockpiles.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="boost-efficiency">
+            <script type="module">
+              addEmbedTriggerAsync('boost-efficiency', (context, active) => {
+                // Dim the previous comment
+                context.setCommentDim('capture-destroy', active)
+
+                // Show the "Boost energy efficiency" comment and set the associated inputs
+                context.setCommentVisible('boost-efficiency', active)
+                context.setInputGroupActive('boost-efficiency', active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            Boost <b>energy efficiency</b> in buildings through better insulation, which reduces the
+            need for cooling.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer" style="height: 85vh"></div>
+
+        <div class="en-roads-caption">
+          <div
+            class="en-roads-scroll-marker"
+            data-trigger="reveal-sliders"
+            style="margin-top: -240px"
+          >
+            <script type="module">
+              addEmbedTriggerAsync('reveal-sliders', (context, active) => {
+                // Hide the action comments
+                context.setCommentVisible('stop-leaks', !active)
+                context.setCommentVisible('use-alternatives', !active)
+                context.setCommentVisible('capture-destroy', !active)
+                context.setCommentVisible('boost-efficiency', !active)
+
+                // Force the sliders back to the default values before they
+                // are revealed (or if we are going backwards, revert to the
+                // values that were active in the previous phase)
+                context.setInputValue('415', active ? 0 : 100)
+                context.setInputValue('47', active ? 1.2 : 5)
+
+                // Reveal the sliders
+                context.setInputRowsVisible(active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            Try dragging the sliders to see the impact of these policies, then scroll down to read
+            more.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer" style="height: 50vh"></div>
+      </div>
+    </section>
+
+    <section>
+      <h3>Part 2: F-Gases Play a Critical Role in the Emissions Puzzle</h3>
+      <p>
+        F-gases have a global warming potential that can be thousands of times greater than
+        CO<sub>2</sub>, making their impact on climate change significant, even though they are
+        released in very small amounts relative to CO<sub>2</sub>. If the world successfully reduces
+        only CO<sub>2</sub> emissions from fossil fuels and land use, future emissions would
+        predominantly come from non-CO<sub>2</sub> gases, which include F-gases and other
+        pollutants. For context, view the global sources of greenhouse gas emissions in the graph
+        below.
+      </p>
+      <p>
+        <i>For context, view the global sources of greenhouse gas emissions in the graph below.</i>
+      </p>
+      <div
+        class="en-roads-embed"
+        data-embed-id="fgas-ghg"
+        data-title="Greenhouse Gas Net Emissions"
+        data-graphs="63-fgas-ghg"
+        data-inputs="415"
+        data-layout-mode="sticky-scroll-triggered"
+        data-sticky-height="6200"
+        data-show-desc-toggle="false"
+        data-show-logo="false"
+        data-show-temp="side"
+      >
+        <script type="module">
+          initEmbedAsync('fgas-ghg', context => {
+            // Enable the "Waste and Leakage" detailed settings switch so that the F-gas slider
+            // can be used
+            context.setInputValue('209', 1)
+            // XXX: Set assumption sliders to their usual default values (this is only needed
+            // because we override the defaults to be zero for the benefit of the intro story,
+            // but for this story we want the usual defaults)
+            context.setInputValue('432', 50)
+            context.setInputValue('433', 50)
+            context.setInputValue('434', 10)
+
+            // Configure the model inputs for the scenarios that will be animated
+            context.addInputGroup('boost-clean-energy', [
+              // Renewables
+              ['16', -0.02],
+              // Carbon price
+              ['39', 135],
+              // Transport energy efficiency
+              ['50', 2.5],
+              // Transport electrification
+              ['373', 15],
+              // Buildings energy efficiency
+              ['47', 2.5],
+              // Buildings electrification
+              ['375', 10]
+            ])
+            context.addInputGroup('protect-forests', [
+              // Deforestation
+              ['57', -10]
+            ])
+            context.addInputGroup('reduce-methane', [
+              // Agriculture
+              ['60', 100],
+              // Methane leakage from energy systems
+              ['405', 100],
+              // Methane and nitrous oxide from waste
+              ['404', 100],
+              // Nitrous oxide from industry
+              ['406', 100]
+            ])
+            context.addInputGroup('reduce-f-gases', [
+              // F-gases
+              ['415', 100]
+            ])
+
+            // Configure the comments
+            const blue = '#00b6f1'
+            context.addComment({
+              id: 'boost-clean-energy',
+              align: 'right',
+              color: blue,
+              shadow: true,
+              yPos: 64,
+              lines: ['Boost clean energy']
+            })
+            context.addComment({
+              id: 'protect-forests',
+              align: 'right',
+              color: blue,
+              shadow: true,
+              yPos: 48,
+              lines: ['Protect forests']
+            })
+            context.addComment({
+              id: 'non-co2-gases',
+              align: 'right',
+              arrow: 'down',
+              yPos: 44,
+              lines: ['Non-CO<sub>2</sub> gases']
+            })
+            context.addComment({
+              id: 'reduce-methane',
+              align: 'right',
+              color: blue,
+              shadow: true,
+              yPos: 48,
+              lines: ['Reduce methane and N<sub>2</sub>O']
+            })
+            context.addComment({
+              id: 'reduce-f-gases',
+              align: 'right',
+              color: blue,
+              shadow: true,
+              yPos: 34,
+              lines: ['Reduce F-gases']
+            })
+
+            // Configure the arrows
+            context.addArrow({
+              id: 'non-co2-gases',
+              x: 2082,
+              yBot: 16.5,
+              yTop: 32
+            })
+
+            // XXX: Show the ghost "Non-CO2 Gases" legend item initially (this covers the 3
+            // legend items at bottom).  This is specific to this story so is not supported
+            // for other stories.
+            context.legend.ghostVisible.set(true)
+
+            // Configure the dataset animations
+            context.addDatasetAnim('reveal-to-final-year')
+            context.addDatasetAnim('reveal-non-co2-gases')
+            context.onDatasetAnimUpdate((state, anims) => {
+              const revealToFinalYearProgress = anims.get('reveal-to-final-year')
+              const revealNonCO2GasesProgress = anims.get('reveal-non-co2-gases')
+
+              const vm = state.viewModel
+              const spec = vm.spec
+
+              // All datasets are visible throughout the story
+              state.visible = true
+
+              // The baseline and first two stacked (CO2) datasets are always full color, but
+              // the other non-CO2 datasets start gray and transition to color in the
+              // 'non-co2-gases-color' phase
+              if (state.index > 2) {
+                vm.color = context.lerpColor('#ccc', spec.color, revealNonCO2GasesProgress)
+              }
+
+              // Use the progress value to control the reveal from 2000 to 2100
+              state.progress = revealToFinalYearProgress
+              state.animMinYear = 2000
+              state.animMaxYear = 2100
+            })
+          })
+        </script>
+
+        <div class="en-roads-caption" id="fgas-ghg-first-caption">
+          <div class="en-roads-scroll-marker" data-trigger="reveal-to-final-year">
+            <script type="module">
+              addEmbedTriggerAsync('reveal-to-final-year', (context, active) => {
+                // Animate the datasets to reveal from 2000 to 2100
+                context.setDatasetAnimActive('reveal-to-final-year', 0, 1000, active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            At our current rate, <b>CO<sub>2</sub> emissions</b> would continue to account for a
+            majority of total greenhouse gas emissions.<br /><br />In a scenario where we only
+            address carbon dioxide emissions, the majority of the future emissions come from the
+            non-CO2 gases.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="boost-clean-energy">
+            <script type="module">
+              addEmbedTriggerAsync('boost-clean-energy', (context, active) => {
+                // Show the "Boost clean energy" comment and set the associated inputs
+                context.setCommentVisible('boost-clean-energy', active)
+                context.setInputGroupActive('boost-clean-energy', active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            We can significantly lower future temperatures by focusing on CO<sub>2</sub> emissions.
+            <br /><br />We can boost the globally successful <b>clean energy</b> revolution – with
+            renewable energy, electrification, and energy efficiency.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="protect-forests">
+            <script type="module">
+              addEmbedTriggerAsync('protect-forests', (context, active) => {
+                // Dim the previous comment
+                context.setCommentDim('boost-clean-energy', active)
+
+                // Show the "Protect forests" comment and set the associated inputs
+                context.setCommentVisible('protect-forests', active)
+                context.setInputGroupActive('protect-forests', active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            <b>Protecting forests</b> and reducing bioenergy can help as well.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="non-co2-gases-comment">
+            <script type="module">
+              addEmbedTriggerAsync('non-co2-gases-comment', (context, active) => {
+                // Hide the first two action comments
+                context.setCommentVisible('boost-clean-energy', !active)
+                context.setCommentVisible('protect-forests', !active)
+
+                // Show the "Non-CO2 gases" comment and arrow
+                context.setCommentVisible('non-co2-gases', active)
+                context.setArrowVisible('non-co2-gases', active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            But improvement stalls at <b>+2.3°C</b> and other "non-CO<sub>2</sub>" gases are the
+            major climate pollutants as we approach the late century!
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="non-co2-gases-color">
+            <script type="module">
+              addEmbedTriggerAsync('non-co2-gases-color', (context, active) => {
+                // Fade the non-CO2 gas wedge colors from gray to the actual color
+                context.setDatasetAnimActive('reveal-non-co2-gases', 0, 600, active)
+
+                // Hide the special "Non-CO2 Gases" legend item to reveal the 3 actual items
+                context.legend.ghostVisible.set(!active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            Those other gases are methane (CH<sub>4</sub>), nitrous oxide (N<sub>2</sub>O), and the
+            F-gases.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="reduce-methane">
+            <script type="module">
+              addEmbedTriggerAsync('reduce-methane', (context, active) => {
+                // Hide the "Non-CO2 gases" comment and arrow
+                context.setCommentVisible('non-co2-gases', !active)
+                context.setArrowVisible('non-co2-gases', !active)
+
+                // Show the "Reduce methane and N2O" comment and set the associated inputs
+                context.setCommentVisible('reduce-methane', active)
+                context.setInputGroupActive('reduce-methane', active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            We can <b>reduce methane and N<sub>2</sub>O</b> by implementing policies across the
+            agricultural, energy, industry, and waste sectors.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer"></div>
+
+        <div class="en-roads-caption">
+          <div class="en-roads-scroll-marker" data-trigger="reduce-f-gases">
+            <script type="module">
+              addEmbedTriggerAsync('reduce-f-gases', (context, active) => {
+                // Dim the previous comment
+                context.setCommentDim('reduce-methane', active)
+
+                // Show the "Reduce F-gases" comment and set the associated inputs
+                context.setCommentVisible('reduce-f-gases', active)
+                context.setInputGroupActive('reduce-f-gases', active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            And finally, by <b>reducing F-gas emissions</b>, we can achieve a +1.9&deg;C scenario.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer" style="height: 85vh"></div>
+
+        <div class="en-roads-caption">
+          <div
+            class="en-roads-scroll-marker"
+            data-trigger="reveal-sliders"
+            style="margin-top: -240px"
+          >
+            <script type="module">
+              addEmbedTriggerAsync('reveal-sliders', (context, active) => {
+                // Hide the previous action comments
+                context.setCommentVisible('reduce-methane', !active)
+                context.setCommentVisible('reduce-f-gases', !active)
+
+                // Force the slider back to the default value before it
+                // is revealed (or if we are going backwards, revert to the
+                // value that was active in the previous phase)
+                context.setInputValue('415', active ? 0 : 100)
+
+                // Reveal the sliders
+                context.setInputRowsVisible(active)
+              })
+            </script>
+          </div>
+          <div class="en-roads-caption-content">
+            Try dragging the slider to see the importance of reducing F-gas emissions, then scroll
+            down to read more.
+          </div>
+        </div>
+
+        <div class="en-roads-caption-spacer" style="height: 40vh"></div>
+      </div>
+    </section>
+    <div class="graph-spacer"></div>
+    <section>
+      <p>
+        Some of the most promising policy actions in the world that could help deliver upon this
+        potential climate win are the implementation of the international Kigali Amendment to the
+        Montreal Protocol and the EU 2014 F-gas Regulation. These initiatives aim to reduce HFCs
+        through measures such as a quota system, leak management, and capped production.
+      </p>
+      <p>
+        Overall, reducing F-gas emissions matter to climate success. Every tenth of a degree reduces
+        the severity of climate impacts. We can do it by adopting best practices to prevent leaks,
+        reusing F-gases rather than treating them as single-use, finding alternatives, and properly
+        destroying the F-gases in abandoned equipment and stockpiles. And when we couple these savvy
+        policies with others, can avoid the worst of the climate crisis and ensure a safer climate
+        future.
+      </p>
+    </section>
+
+    <section>
+      <h2 id="programmatically-triggered-story">Programmatically-Triggered Story</h2>
+      <p>
+        The previous example demonstrated how to use markers and captions to trigger a sequence of
+        steps that tell a story. In this example, we will show the same graph, but will demonstrate
+        how you can programmatically trigger different actions in the story using HTML checkboxes.
+      </p>
+      <p>
+        This technique allows you to control the sequence of events based on time or user actions
+        (i.e., you are not limited to using only scroll position as the way to trigger stories).
+      </p>
+      <details>
+        <summary>Show me the code!</summary>
+        <pre>
+<span style="color: #999">&lt;!-- See page source for more details --&gt;</span></pre>
+      </details>
+      <div
+        class="en-roads-embed"
+        data-embed-id="programmatically-triggered"
+        data-title="Greenhouse Gas Net Emissions"
+        data-graphs="63-fgas-ghg"
+        data-inputs="415"
+        data-show-desc-toggle="false"
+        data-show-logo="false"
+        data-show-temp="side"
+      >
+        <script type="module">
+          initEmbedAsync('programmatically-triggered', context => {
+            // Configure the model inputs for the scenarios that will be animated
+            context.addInputGroup('boost-clean-energy', [
+              // Renewables
+              ['16', -0.02],
+              // Carbon price
+              ['39', 135],
+              // Transport energy efficiency
+              ['50', 2.5],
+              // Transport electrification
+              ['373', 15],
+              // Buildings energy efficiency
+              ['47', 2.5],
+              // Buildings electrification
+              ['375', 10]
+            ])
+
+            // Configure the comments
+            const blue = '#00b6f1'
+            context.addComment({
+              id: 'boost-clean-energy',
+              align: 'right',
+              color: blue,
+              shadow: true,
+              yPos: 64,
+              lines: ['Boost clean energy']
+            })
+            context.addComment({
+              id: 'non-co2-gases',
+              align: 'right',
+              arrow: 'down',
+              yPos: 48,
+              lines: ['Non-CO<sub>2</sub> gases']
+            })
+
+            // Configure the arrows
+            context.addArrow({
+              id: 'non-co2-gases',
+              x: 2082,
+              yBot: 22,
+              yTop: 36
+            })
+
+            // Configure the dataset animations
+            context.addDatasetAnim('reveal-to-final-year')
+            context.onDatasetAnimUpdate((state, anims) => {
+              const revealToFinalYearProgress = anims.get('reveal-to-final-year')
+
+              const vm = state.viewModel
+              const spec = vm.spec
+
+              // All datasets are visible throughout the story
+              state.visible = true
+
+              // Use the progress value to control the reveal from 2000 to 2100
+              state.progress = revealToFinalYearProgress
+              state.animMinYear = 2000
+              state.animMaxYear = 2100
+            })
+          })
+        </script>
+      </div>
+      <div style="display: flex; justify-content: center; margin: 20px auto">
+        <div style="display: flex; flex-direction: column">
+          <div>
+            <label for="manual-reveal-datasets">
+              <input
+                type="checkbox"
+                name="manual-reveal-datasets"
+                onchange="(() => {
+                  // Animate the datasets to reveal from 2000 to 2100
+                  const context = getEmbedTriggerContext('programmatically-triggered')
+                  const active = this.checked
+                  context.setDatasetAnimActive('reveal-to-final-year', 0, 1000, active)
+                })()"
+              />
+              Reveal Datasets</label
+            >
+          </div>
+          <div>
+            <label for="manual-boost-clean-energy">
+              <input
+                type="checkbox"
+                name="manual-boost-clean-energy"
+                onchange="(() => {
+                  // Show the 'Boost clean energy' comment and set the associated inputs
+                  const context = getEmbedTriggerContext('programmatically-triggered')
+                  const active = this.checked
+                  context.setCommentVisible('boost-clean-energy', active)
+                  context.setInputGroupActive('boost-clean-energy', active)
+                })()"
+              />
+              Boost Clean Energy
+            </label>
+          </div>
+          <div>
+            <label for="manual-non-co2-gases">
+              <input
+                type="checkbox"
+                name="manual-non-co2-gases"
+                onchange="(() => {
+                  // Show the 'Non-CO2 gases' comment and arrow
+                  const context = getEmbedTriggerContext('programmatically-triggered')
+                  const active = this.checked
+                  context.setCommentVisible('non-co2-gases', active)
+                  context.setArrowVisible('non-co2-gases', active)
+                })()"
+              />
+              Label Non-CO<sub>2</sub> Gases
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="scroll-driven-story-afforestatation-v2">
+        Scroll-Driven Story (Afforestation Scrollytelling v2)
+      </h2>
+      <p>
+        In our early explorations of scrollytelling, we implemented "scroll-driven" stories. These
+        are different from the "scroll-triggered" stories shown in earlier examples.
+      </p>
+      <ul>
+        <li>
+          Scroll-<i>Triggered</i>: The different phases of the story are triggered (i.e., animations
+          are started) when the scroll position reaches a certain point. Once the point is reached,
+          an animation or change takes effect and runs to completion (either immediately or in less
+          than 1 second).
+        </li>
+        <li>
+          Scroll-<i>Driven</i>: The scroll position directly drives overall animation progress. Each
+          phase of the story animates according to the scroll position pixel offsets. For example,
+          if the story has a (scroll) height of 1000 pixels, then every time the user scrolls 10
+          pixels, it drives the overall animation progress forward by 1%.
+        </li>
+      </ul>
+      <p>
+        The scroll-driven technique is useful for certain things, like simulating a model input
+        slider by scrolling the page. (Notice how the blue progress bar in the subtitle gives the
+        user some context about how much the slider/scenario has taken effect.) However, other
+        things, like label fade and dataset reveal animations, are awkward because depending on
+        where the user pauses their scrolling, the animation may be left in an in-between state (for
+        example, a label may be halfway through a fade-in transition).
+      </p>
+      <p>
+        When developing our first scrollytelling article on F-gases, we initially used the
+        scroll-driven technique but in testing we felt that it provided a poor user experience. (It
+        requires a lot of scrolling or swiping to keep things moving, and we had too many moving
+        elements on the screen that were difficult for the user to track.) We decided to switch to
+        the scroll-triggered technique and reduced the amount of moving objects on the screen, both
+        of which helped improve the user experience.
+      </p>
+      <p>
+        The following example demonstrates the scroll-driven approach. It is derived from the
+        original "trillion trees" concept article, except not quite as polished. We will preserve
+        this implementation in case it is helpful for future projects.
+      </p>
+      <p>
+        Note that unlike the scroll-triggered examples above (which can be customized in the page
+        via the "scroll-triggered story API"), the code that configures this example is baked into
+        the embed library and we don't yet have a "scroll-driven story API".
+      </p>
+      <div
+        class="en-roads-embed"
+        data-embed-id="afforestation-v2"
+        data-title="Greenhouse Gas Net Emissions"
+        data-subtitle="Afforestation"
+        data-graphs="62-afforestation"
+        data-layout-mode="sticky-scroll-driven"
+        data-sticky-height="4600"
+        data-show-desc-toggle="false"
+        data-show-logo="false"
+      >
+        <div class="en-roads-caption" style="top: 220px">
+          <div class="en-roads-caption-content">
+            Greenhouse gas emissions continue to cause global temperatures to rise.
+          </div>
+        </div>
+        <div class="en-roads-caption" style="top: 1260px">
+          <div class="en-roads-caption-content">
+            If we stay on our current course (the <b>Baseline Scenario</b> in En&#8209;ROADS), we
+            are heading for a temperature increase of <b>3.3°C</b> by 2100.
+          </div>
+        </div>
+        <div class="en-roads-caption" style="top: 2100px">
+          <div class="en-roads-caption-content">
+            As the dotted line shows, we need to
+            <b>rapidly reduce</b> greenhouse gas emissions to keep temperatures down and to avoid
+            the worst effects of climate change.
+          </div>
+        </div>
+        <div class="en-roads-caption" style="top: 2850px">
+          <div class="en-roads-caption-content">
+            Watch the <b style="color: #00b6f1">blue line</b>. It shows the effect of planting
+            trees.
+          </div>
+        </div>
+        <div class="en-roads-caption" style="top: 3550px">
+          <div class="en-roads-caption-content">
+            Even if we were to plant a "trillion" trees on
+            <b>100% of available land</b>, the effect on temperature is a fraction of what we need.
+          </div>
+        </div>
+      </div>
+      <div class="graph-spacer"></div>
+      <p>
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec pharetra libero et magna
+        iaculis elementum. Praesent a sapien ac lacus aliquet convallis nec id risus. Mauris id urna
+        ac felis imperdiet rutrum. Nunc sed nibh non lacus sodales pretium sed ut turpis. Maecenas
+        pharetra pretium lectus. Sed congue erat a massa consectetur, sit amet fermentum quam
+        aliquam. Curabitur aliquet leo aliquet, vehicula mi non, varius dolor. Aenean convallis
+        lorem id tellus sollicitudin, ut elementum turpis blandit. Nunc interdum ante diam, eget
+        ultricies ante rhoncus sed. Fusce finibus ligula eget lorem ornare, non hendrerit diam
+        auctor.
+      </p>
+      <p>
+        Suspendisse felis mi, dictum non justo eget, porttitor interdum ipsum. Orci varius natoque
+        penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec et finibus mauris.
+        Donec quis auctor nulla. Integer non nulla in lorem molestie posuere. Pellentesque
+        sollicitudin, diam sed finibus aliquet, tellus enim lacinia metus, vitae gravida magna nulla
+        et nisi. Sed ac ipsum massa. Nullam id fringilla mauris, nec mattis tortor. Mauris eleifend
+        metus eu magna semper tincidunt. Nulla facilisi. Pellentesque dapibus augue at ultrices
+        facilisis.
+      </p>
+    </section>
+
+    <section>
+      <h2 id="scroll-driven-story-afforestatation-v1">
+        Scroll-Driven Story (Afforestation Scrollytelling v1)
+      </h2>
+      <p>
+        This is an even earlier version of the previous scroll-driven example. This one used little
+        markers to help associate temperature increase at a particular time with the data point for
+        GHG emissions. (It is not fully functional; the blue temperature bubble fails to track the
+        blue line). Although it is not likely to be used directly, we will preserve this
+        implementation in case it is a helpful point of reference for future projects.
+      </p>
+      <div
+        class="en-roads-embed"
+        data-embed-id="afforestation-v1"
+        data-title="Greenhouse Gas Net Emissions"
+        data-subtitle="Afforestation"
+        data-graphs="62-afforestation"
+        data-layout-mode="sticky-scroll-driven"
+        data-sticky-height="4600"
+        data-show-desc-toggle="false"
+        data-show-logo="false"
+      >
+        <div class="en-roads-caption" style="top: 220px">
+          <div class="en-roads-caption-content">
+            Greenhouse gas emissions continue to cause global temperatures to rise.
+          </div>
+        </div>
+        <div class="en-roads-caption" style="top: 1260px">
+          <div class="en-roads-caption-content">
+            If we stay on our current course (the <b>Baseline Scenario</b> in En&#8209;ROADS), we
+            are heading for a temperature increase of <b>3.3°C</b> by 2100.
+          </div>
+        </div>
+        <div class="en-roads-caption" style="top: 2100px">
+          <div class="en-roads-caption-content">
+            As the dotted line shows, we need to
+            <b>rapidly reduce</b> greenhouse gas emissions to keep temperatures down and to avoid
+            the worst effects of climate change.
+          </div>
+        </div>
+        <div class="en-roads-caption" style="top: 2850px">
+          <div class="en-roads-caption-content">
+            Watch the <b style="color: #00b6f1">blue line</b>. It shows the effect of planting
+            trees.
+          </div>
+        </div>
+        <div class="en-roads-caption" style="top: 3550px">
+          <div class="en-roads-caption-content">
+            Even if we were to plant a "trillion" trees on
+            <b>100% of available land</b>, the effect on temperature is a fraction of what we need.
+          </div>
+        </div>
+      </div>
+      <div class="graph-spacer"></div>
+      <p>
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec pharetra libero et magna
+        iaculis elementum. Praesent a sapien ac lacus aliquet convallis nec id risus. Mauris id urna
+        ac felis imperdiet rutrum. Nunc sed nibh non lacus sodales pretium sed ut turpis. Maecenas
+        pharetra pretium lectus. Sed congue erat a massa consectetur, sit amet fermentum quam
+        aliquam. Curabitur aliquet leo aliquet, vehicula mi non, varius dolor. Aenean convallis
+        lorem id tellus sollicitudin, ut elementum turpis blandit. Nunc interdum ante diam, eget
+        ultricies ante rhoncus sed. Fusce finibus ligula eget lorem ornare, non hendrerit diam
+        auctor.
+      </p>
+      <p>
+        Suspendisse felis mi, dictum non justo eget, porttitor interdum ipsum. Orci varius natoque
+        penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec et finibus mauris.
+        Donec quis auctor nulla. Integer non nulla in lorem molestie posuere. Pellentesque
+        sollicitudin, diam sed finibus aliquet, tellus enim lacinia metus, vitae gravida magna nulla
+        et nisi. Sed ac ipsum massa. Nullam id fringilla mauris, nec mattis tortor. Mauris eleifend
+        metus eu magna semper tincidunt. Nulla facilisi. Pellentesque dapibus augue at ultrices
+        facilisis.
+      </p>
+    </section>
+  </body>
+</html>
