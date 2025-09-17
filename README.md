@@ -10,5 +10,5 @@ npm i
 npm run dev
 
 # Open the demo page in your browser (replace {URL} with the actual URL supplied separately)
-open http://localhost:8080/index.html?url={URL}
+open http://localhost:8080/en-roads-embed-demo/index.html?url={URL}
 ```
