@@ -1,0 +1,17 @@
+{
+  "name": "en-roads-embed-demo",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "prettier:check": "prettier --check .",
+    "prettier:fix": "prettier --write .",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "vite": "^7.1.2"
+  }
+}
